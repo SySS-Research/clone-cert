@@ -16,4 +16,4 @@ Example:
     /tmp/www.example.com:443.cert
 
 The new certificate is in `/tmp/www.example.com:443.cert` and the
-corresponding private key is in /tmp/www.example.com:443.key.
+corresponding private key is in `/tmp/www.example.com:443.key`.
