@@ -5,7 +5,7 @@ This is a simple shell script that reads the subject and issuer of an X.509
 certificate associated with an SSL wrapped TCP port and uses `openssl` to
 create a similar certificate with the same subject and the same issuer. This
 is particularly useful if you want to demonstrate why self-signed
-certificate cannot provide any security. Of course, the fingerprint of the
+certificates cannot provide any security. Of course, the fingerprint of the
 cloned certificate will be different... but who checks the fingerprint of a
 self-signed certificate by hand?
 
