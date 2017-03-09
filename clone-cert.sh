@@ -1,5 +1,7 @@
 #!/bin/bash
 # Adrian Vollmer, SySS GmbH 2017
+# Reference:
+# https://security.stackexchange.com/questions/127095/manually-walking-through-the-signature-validation-of-a-certificate
 
 set -e
 
@@ -7,6 +9,7 @@ HOST="$1"
 SERVER="$(printf "%s" "$HOST" | cut -f1 -d:)"
 DIR="/tmp/"
 KEYLENGTH=1024 # 1024 is faster, but less secure than 4096
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$HOST" = "" ] ; then
 cat <<EOF
@@ -18,67 +21,83 @@ EOF
     exit 1
 fi
 
-comma2slash () {
-    quotes=0
-    while IFS= read -n1 c ; do
-        if [ "$c" = "\"" ] ; then
-             ((quotes+=1))
-        fi
-        if [ "$c" = "," ] && ((quotes % 2 == 0 ))  ; then
-            IFS= read -r -n1 c2
-            if [ "$c$c2" = ", " ] ; then
-                printf "%s" "/"
-            else
-                printf "%s" "$c$c2"
-            fi
-        else
-            printf "%s" "$c"
-        fi
-    done
+
+function oid() {
+    # https://bugzil.la/1064636
+    case "$1" in 
+        # "300d06092a864886f70d0101020500")
+        # ;;md2WithRSAEncryption
+        "300b06092a864886f70d01010b") echo sha256
+        ;;#sha256WithRSAEncryption
+        "300b06092a864886f70d010105") echo sha1
+        ;;#sha1WithRSAEncryption
+        "300d06092a864886f70d01010c0500") echo sha384
+        ;;#sha384WithRSAEncryption
+        # "300a06082a8648ce3d040303")
+        # ;;#ecdsa-with-SHA384
+        # "300a06082a8648ce3d040302"
+        # ;;#ecdsa-with-SHA256
+        "300d06092a864886f70d0101040500") echo md5
+        ;;#md5WithRSAEncryption
+        "300d06092a864886f70d01010d0500") echo sha512
+        ;;#sha512WithRSAEncryption
+        "300d06092a864886f70d01010b0500") echo sha256
+        ;;#sha256WithRSAEncryption
+        "300d06092a864886f70d0101050500") echo sha1
+        ;;#sha1WithRSAEncryption
+        *) echo "UnknownDigest"
+        ;;
+    esac
 }
 
-cleanup () {
-    # sed "s/^[^=]\+=/\//" | sed 's/ = /=/g' | comma2slash | sed 's/"//g'
-    sed "s/^[^=]\+=\//\//"
-}
+CLONED_CERT_FILE="$DIR$HOST.cert"
+CLONED_KEY_FILE="$DIR$HOST.key"
+ORIG_CERT_FILE="$CLONED_CERT_FILE.orig"
 
 CERT="$(openssl s_client -servername "$SERVER" \
-        -connect "$HOST" < /dev/null 2>  /dev/null)"
+    -connect "$HOST" < /dev/null 2> /dev/null| 
+    sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' )"
+printf "%s" "$CERT" > "$ORIG_CERT_FILE"
+OLD_MODULUS="$(openssl x509 -in "$ORIG_CERT_FILE" -modulus -noout \
+    | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
+KEY_LEN="$(openssl x509  -in "$ORIG_CERT_FILE" -noout -text \
+    | grep Public-Key: | grep -o "[0-9]\+")"
 
-SUBJ="$(printf "%s" "$CERT" | grep "^subject" | cleanup )"
-ISSUER="$(printf "%s" "$CERT" | grep "^issuer" | cleanup )"
-DATES="$(printf "%s" "$CERT" | openssl x509 -noout -dates | sed 's/^.*=/\//')"
-ALTNAMES="$(printf "%s" "$CERT" | openssl x509 -noout -text | grep DNS: | sed 's/DNS://g')"
 
+MY_PRIV_KEY="$SCRIPT_DIR/$KEY_LEN.key"
+MY_PUBL_KEY="$SCRIPT_DIR/$KEY_LEN.cert"
 
-STARTDATE="$(printf "%s" "$DATES" | head -n1 | sed 's/\///g')"
-ENDDATE="$(printf "%s" "$DATES" | tail -n1 | sed 's/\///g')"
-ENDDATE="$(date --date="$ENDDATE" +"%s")"
-NOW=$(date +"%s")
-((DAYS=(ENDDATE-NOW)/3600/24))
+offset="$(openssl asn1parse -in "$ORIG_CERT_FILE" | grep SEQUENCE \
+    | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
+SIGNING_ALGO="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
+    -strparse $offset -noout -out - | xxd -p -c99999)"
+offset="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
+    | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
+OLD_SIGNATURE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
+    -strparse $offset -noout -out - | xxd -p -c999999)"
+OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
+    -strparse 4 -noout -out - | xxd -p -c99999)"
 
-if [ "$SUBJ" = "$ISSUER" ] ; then #  self-signed
-    openssl req -new -newkey rsa:$KEYLENGTH -days $DAYS -nodes -x509 \
-        -subj "$SUBJ" -keyout "$DIR$HOST.key" -out "$DIR$HOST.cert" \
-        2> /dev/null
-else
-    openssl req -new -newkey rsa:$KEYLENGTH -nodes -x509 \
-        -subj "$ISSUER" -keyout "$DIR$HOST.ca.key" \
-        -out "$DIR$HOST.ca.cert" 2> /dev/null
-    openssl req -new -newkey rsa:$KEYLENGTH  -nodes \
-        -subj "$SUBJ" -keyout "$DIR$HOST.key"  -out "$DIR$HOST.req" \
-        2> /dev/null
-        # -config <(printf "[req]\nreq_extensions = v3_req\n[ v3_req ]
-        # keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-        # subjectAltName = @alt_names
-        # [alt_names]
-        # DNS.1 = server1.example.com")
-        # TODO Set alt names
-    openssl x509 -CAkey "$DIR$HOST.ca.key" -days "$DAYS" \
-        -CA "$DIR$HOST.ca.cert" -req -in "$DIR$HOST.req" \
-        -out "$DIR$HOST.cert" -set_serial 0  2> /dev/null
-    # TODO how to set notBefore date?
+if [ ! -f "$MY_PRIV_KEY" -o ! -f "$KEY_LEN.cert" ] ; then
+    openssl req -new -newkey rsa:$KEY_LEN -days 356 -nodes -x509 \
+            -subj "/C=XX" -keyout "$MY_PRIV_KEY" -out "$MY_PUBL_KEY" \
+            2> /dev/null
 fi
 
-printf "%s\n" "$DIR$HOST.key"
-printf "%s\n" "$DIR$HOST.cert"
+NEW_MODULUS="$(openssl x509 -in "$MY_PUBL_KEY" -noout -modulus \
+    | sed 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
+NEW_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
+    | sed "s/$OLD_MODULUS/$NEW_MODULUS/")"
+
+digest="$(oid "$SIGNING_ALGO")"
+NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | xxd -p -r | \
+    openssl dgst -$digest -sign "$MY_PRIV_KEY" | xxd -p -c99999)"
+
+openssl x509 -in "$ORIG_CERT_FILE" -outform DER | xxd -p -c 10000 \
+    | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
+    | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | xxd -r -p \
+    | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
+
+cp "$MY_PRIV_KEY" "$CLONED_KEY_FILE"
+printf "%s\n" "$CLONED_KEY_FILE"
+printf "%s\n" "$CLONED_CERT_FILE"
