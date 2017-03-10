@@ -93,7 +93,7 @@ digest="$(oid "$SIGNING_ALGO")"
 NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | xxd -p -r | \
     openssl dgst -$digest -sign "$MY_PRIV_KEY" | xxd -p -c99999)"
 
-openssl x509 -in "$ORIG_CERT_FILE" -outform DER | xxd -p -c 10000 \
+openssl x509 -in "$ORIG_CERT_FILE" -outform DER | xxd -p -c99999 \
     | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
     | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | xxd -r -p \
     | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"

@@ -1,7 +1,7 @@
 clone-cert.sh
 =============
 
-This is a simple shell script that retrives the X.509 certificate associated
+This is a simple shell script that retrieves the X.509 certificate associated
 with an SSL wrapped TCP port and uses `openssl` to create a similar
 certificate by replacing the RSA modulus and fixing the signature. This is
 particularly useful if you want to demonstrate why self-signed certificates
