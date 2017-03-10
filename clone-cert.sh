@@ -33,10 +33,10 @@ function oid() {
         ;;#sha1WithRSAEncryption
         "300d06092a864886f70d01010c0500") echo sha384
         ;;#sha384WithRSAEncryption
-        # "300a06082a8648ce3d040303")
-        # ;;#ecdsa-with-SHA384
-        # "300a06082a8648ce3d040302"
-        # ;;#ecdsa-with-SHA256
+        "300a06082a8648ce3d040303") echo "ECDSA not supported" >&2; exit 1
+        ;;#ecdsa-with-SHA384
+        "300a06082a8648ce3d040302") "ECDSA not supported" >&2; exit 1
+        ;;#ecdsa-with-SHA256
         "300d06092a864886f70d0101040500") echo md5
         ;;#md5WithRSAEncryption
         "300d06092a864886f70d01010d0500") echo sha512
@@ -45,7 +45,8 @@ function oid() {
         ;;#sha256WithRSAEncryption
         "300d06092a864886f70d0101050500") echo sha1
         ;;#sha1WithRSAEncryption
-        *) echo "UnknownDigest"
+        *) echo "Unknow Hash Algorithm OID: $1" >&2
+            exit 1
         ;;
     esac
 }
@@ -79,11 +80,9 @@ OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
     -strparse 4 -noout -out - | xxd -p -c99999)"
 
 # TODO support DSA, EC
-if [ ! -f "$MY_PRIV_KEY" -o ! -f "$KEY_LEN.cert" ] ; then
-    openssl req -new -newkey rsa:$KEY_LEN -days 356 -nodes -x509 \
-            -subj "/C=XX" -keyout "$MY_PRIV_KEY" -out "$MY_PUBL_KEY" \
-            2> /dev/null
-fi
+openssl req -new -newkey rsa:$KEY_LEN -days 356 -nodes -x509 \
+        -subj "/C=XX" -keyout "$MY_PRIV_KEY" -out "$MY_PUBL_KEY" \
+        2> /dev/null
 
 NEW_MODULUS="$(openssl x509 -in "$MY_PUBL_KEY" -noout -modulus \
     | sed 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
