@@ -24,7 +24,7 @@ fi
 
 function oid() {
     # https://bugzil.la/1064636
-    case "$1" in 
+    case "$1" in
         # "300d06092a864886f70d0101020500")
         # ;;md2WithRSAEncryption
         "300b06092a864886f70d01010b") echo sha256
@@ -55,7 +55,7 @@ CLONED_KEY_FILE="$DIR$HOST.key"
 ORIG_CERT_FILE="$CLONED_CERT_FILE.orig"
 
 CERT="$(openssl s_client -servername "$SERVER" \
-    -connect "$HOST" < /dev/null 2> /dev/null| 
+    -connect "$HOST" < /dev/null 2> /dev/null|
     sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' )"
 printf "%s" "$CERT" > "$ORIG_CERT_FILE"
 OLD_MODULUS="$(openssl x509 -in "$ORIG_CERT_FILE" -modulus -noout \
@@ -78,6 +78,7 @@ OLD_SIGNATURE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
 OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
     -strparse 4 -noout -out - | xxd -p -c99999)"
 
+# TODO support DSA, EC
 if [ ! -f "$MY_PRIV_KEY" -o ! -f "$KEY_LEN.cert" ] ; then
     openssl req -new -newkey rsa:$KEY_LEN -days 356 -nodes -x509 \
             -subj "/C=XX" -keyout "$MY_PRIV_KEY" -out "$MY_PUBL_KEY" \
