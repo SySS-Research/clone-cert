@@ -22,7 +22,9 @@ The new certificate is in `/tmp/www.example.com:443.cert` and the corresponding
 private key is in `/tmp/www.example.com:443.key`. Their difference is only in
 the RSA modulus and the signature:
 
-	$ diff <(openssl x509 -in /tmp/www.example.com:443.cert -noout -text) <(openssl s_client  -connect www.example.com:443 < /dev/null 2> /dev/null | openssl x509 -noout -text)
+	$ diff <(openssl x509 -in /tmp/www.example.com:443.cert -noout -text) \
+           <(openssl s_client  -connect www.example.com:443 < /dev/null 2> /dev/null \
+           | openssl x509 -noout -text)
 	16,33c16,33
 	<                     00:c3:59:26:a5:ed:1c:2b:75:3a:0c:a2:ab:49:43:
 	<                     e8:1a:cd:24:64:4a:11:5a:fe:94:10:57:2a:af:f6:
