@@ -64,8 +64,8 @@ KEY_LEN="$(openssl x509  -in "$ORIG_CERT_FILE" -noout -text \
     | grep Public-Key: | grep -o "[0-9]\+")"
 
 
-MY_PRIV_KEY="$SCRIPT_DIR/$KEY_LEN.key"
-MY_PUBL_KEY="$SCRIPT_DIR/$KEY_LEN.cert"
+MY_PRIV_KEY="$DIR$HOST.$KEY_LEN.key"
+MY_PUBL_KEY="$DIR$HOST.$KEY_LEN.cert"
 
 offset="$(openssl asn1parse -in "$ORIG_CERT_FILE" | grep SEQUENCE \
     | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
