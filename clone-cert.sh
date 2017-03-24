@@ -56,7 +56,7 @@ CLONED_KEY_FILE="$DIR$HOST.key"
 ORIG_CERT_FILE="$CLONED_CERT_FILE.orig"
 
 openssl s_client -servername "$SERVER" \
-    -connect "$HOST" < /dev/null 2> /dev/null | \
+    -connect "$HOST" < /dev/null 2>&1 | \
     openssl x509 -outform PEM -out "$ORIG_CERT_FILE"
 OLD_MODULUS="$(openssl x509 -in "$ORIG_CERT_FILE" -modulus -noout \
     | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
@@ -70,13 +70,13 @@ MY_PUBL_KEY="$DIR$HOST.$KEY_LEN.cert"
 offset="$(openssl asn1parse -in "$ORIG_CERT_FILE" | grep SEQUENCE \
     | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
 SIGNING_ALGO="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
-    -strparse $offset -noout -out - | xxd -p -c99999)"
+    -strparse $offset -noout -out >(xxd -p -c99999))"
 offset="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
     | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
 OLD_SIGNATURE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
-    -strparse $offset -noout -out - | xxd -p -c999999)"
+    -strparse $offset -noout -out >(xxd -p -c999999))"
 OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$ORIG_CERT_FILE" \
-    -strparse 4 -noout -out - | xxd -p -c99999)"
+    -strparse 4 -noout -out >(xxd -p -c99999))"
 
 # TODO support DSA, EC
 openssl req -new -newkey rsa:$KEY_LEN -days 356 -nodes -x509 \
