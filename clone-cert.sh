@@ -6,7 +6,13 @@
 set -e
 
 HOST="$1"
-SERVER="$(printf "%s" "$HOST" | cut -f1 -d:)"
+
+if [[ -f "$HOST" ]] ; then
+    FILENAME="$(basename "$HOST")"
+else
+    SERVER="$(printf "%s" "$HOST" | cut -f1 -d:)"
+fi
+
 DIR="/tmp/"
 KEYLENGTH=1024 # 1024 is faster, but less secure than 4096
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -16,7 +22,7 @@ cat <<EOF
 Clone an X509 certificate. The forged certificate and the corresponding key
 will be located in $DIR. Their filenames make up the output of this script.
 
-Usage: $0 <host>:<port>
+Usage: $0 <host>:<port>|<pem-file>
 EOF
     exit 1
 fi
@@ -51,13 +57,24 @@ function oid() {
     esac
 }
 
-CLONED_CERT_FILE="$DIR$HOST.cert"
-CLONED_KEY_FILE="$DIR$HOST.key"
+if [[ -f "$HOST" ]] ; then
+    CLONED_CERT_FILE="$DIR$FILENAME.cert"
+    CLONED_KEY_FILE="$DIR$FILENAME.key"
+else
+    CLONED_CERT_FILE="$DIR$HOST.cert"
+    CLONED_KEY_FILE="$DIR$HOST.key"
+fi
 ORIG_CERT_FILE="$CLONED_CERT_FILE.orig"
 
-openssl s_client -servername "$SERVER" \
-    -connect "$HOST" < /dev/null 2>&1 | \
-    openssl x509 -outform PEM -out "$ORIG_CERT_FILE"
+
+if [[ -f "$HOST" ]] ; then
+    cp "$HOST" "$ORIG_CERT_FILE"
+else
+    openssl s_client -servername "$SERVER" \
+        -connect "$HOST" < /dev/null 2>&1 | \
+        openssl x509 -outform PEM -out "$ORIG_CERT_FILE"
+fi
+
 OLD_MODULUS="$(openssl x509 -in "$ORIG_CERT_FILE" -modulus -noout \
     | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
 KEY_LEN="$(openssl x509  -in "$ORIG_CERT_FILE" -noout -text \
