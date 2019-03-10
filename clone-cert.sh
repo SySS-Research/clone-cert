@@ -15,7 +15,7 @@ else
 fi
 
 DIR="/tmp/"
-KEYLENGTH=1024 # 1024 is faster, but less secure than 4096
+KEYLENGTH=2048 # 2048 is faster, but less secure than 4096
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$HOST" = "" ] ; then
