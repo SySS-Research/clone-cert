@@ -4,9 +4,11 @@
 # https://security.stackexchange.com/questions/127095/manually-walking-through-the-signature-validation-of-a-certificate
 
 set -e
+set -u
 
 HOST="$1"
-COMPROMISED_SN="$2"
+COMPROMISED_CA="$2"
+COMPROMISED_KEY="$3"
 
 if [[ -f "$HOST" ]] ; then
     FILENAME="$(basename "$HOST")"
@@ -20,14 +22,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$HOST" = "" ] ; then
 cat <<EOF
-Usage: $0 <host>:<port>|<pem-file> [subject]
+Usage: $0 <host>:<port>|<pem-file> [<subject> <key>]
 
 Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in $DIR. Their filenames make up the output of this script.
 
-As an optional parameter, you can specifiy the distinguished name of the
-subject of a certificate for which you have the private key. This script
-will clone all certificates in the chain below the compromised one.
+As optional parameters, you can specifiy the distinguished name of the
+subject of a certificate and the corresponding private key in PEM format.
+This script will clone all certificates in the chain below the compromised
+one.
 EOF
     exit 1
 fi
