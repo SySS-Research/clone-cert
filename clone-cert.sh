@@ -49,7 +49,7 @@ function oid() {
         ;;#sha384WithRSAEncryption
         "300a06082a8648ce3d040303") echo "ECDSA not supported" >&2; exit 1
         ;;#ecdsa-with-SHA384
-        "300a06082a8648ce3d040302") "ECDSA not supported" >&2; exit 1
+        "300a06082a8648ce3d040302") echo "ECDSA not supported" >&2; exit 1
         ;;#ecdsa-with-SHA256
         "300d06092a864886f70d0101040500") echo md5
         ;;#md5WithRSAEncryption
