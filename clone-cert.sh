@@ -26,8 +26,8 @@ Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in $DIR. Their filenames make up the output of this script.
 
 As an optional parameter, you can specifiy the distinguished name of the
-subject of a certificate that you control. This script will clone all
-certificates in the chain below the compromised one.
+subject of a certificate for which you have the private key. This script
+will clone all certificates in the chain below the compromised one.
 EOF
     exit 1
 fi
