@@ -6,6 +6,7 @@
 set -e
 
 HOST="$1"
+COMPROMISED_SN="$2"
 
 if [[ -f "$HOST" ]] ; then
     FILENAME="$(basename "$HOST")"
@@ -19,10 +20,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$HOST" = "" ] ; then
 cat <<EOF
-Clone an X509 certificate. The forged certificate and the corresponding key
+Usage: $0 <host>:<port>|<pem-file> [subject]
+
+Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in $DIR. Their filenames make up the output of this script.
 
-Usage: $0 <host>:<port>|<pem-file>
+As an optional parameter, you can specifiy the distinguished name of the
+subject of a certificate that you control. This script will clone all
+certificates in the chain below the compromised one.
 EOF
     exit 1
 fi
