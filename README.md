@@ -15,14 +15,14 @@ Example
 Run the script:
 
     $ ./clone-cert.sh www.example.com:443
-    /tmp/www.example.com:443.key
-    /tmp/www.example.com:443.cert
+    /tmp/www.example.com:443_0.key
+    /tmp/www.example.com:443_0.cert
 
-The new certificate is in `/tmp/www.example.com:443.cert` and the corresponding
-private key is in `/tmp/www.example.com:443.key`. Their difference is only in
+The new certificate is in `/tmp/www.example.com:443_0.cert` and the corresponding
+private key is in `/tmp/www.example.com:443_0.key`. Their difference is only in
 the RSA modulus and the signature:
 
-	$ diff <(openssl x509 -in /tmp/www.example.com:443.cert -noout -text) \
+	$ diff <(openssl x509 -in /tmp/www.example.com:443_0.cert -noout -text) \
            <(openssl s_client  -connect www.example.com:443 < /dev/null 2> /dev/null \
              | openssl x509 -noout -text)
 	16,33c16,33
