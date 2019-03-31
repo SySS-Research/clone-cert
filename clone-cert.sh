@@ -149,7 +149,21 @@ function clone_cert () {
     local CERT_FILE="$1"
     local ISSUING_KEY="$2"
     SUBJECT="$(openssl x509 -in "$CERT_FILE" -noout -subject \
-        | sed 's/^subject=//g' | sed 's/ /_/g')"
+        | sed 's/.* CN = //g')"
+    ISSUER="$(openssl x509 -in "$CERT_FILE" -noout -issuer \
+        | sed 's/.* CN = //g')"
+
+    # if it is not self-signed and we have no compromised CA, change the
+    # issuer or no browser will allow an exception
+    # it needs to stay the same length though
+    if [[ ! -f $ISSUING_KEY ]] && [[ $ISSUER != $SUBJECT ]]; then
+        NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
+        echo $NEW_ISSUER $ISSUER
+    else
+        NEW_ISSUER=$ISSUER
+    fi
+    ISSUER=$(printf "%s" "$ISSUER" | hexlify)
+    NEW_ISSUER=$(printf "%s" "$NEW_ISSUER" | hexlify)
     CLONED_CERT_FILE="${CERT_FILE}.cert"
     CLONED_KEY_FILE="${CERT_FILE}.key"
 
@@ -173,6 +187,8 @@ function clone_cert () {
     OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$CERT_FILE" \
         -strparse 4 -noout -out >(hexlify))"
 
+    OLD_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
+        | sed "s/$ISSUER/$NEW_ISSUER/")"
     # create new signature
     NEW_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/")"
@@ -189,6 +205,7 @@ function clone_cert () {
     # replace signature
     openssl x509 -in "$CERT_FILE" -outform DER | hexlify \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
+        | sed "s/$ISSUER/$NEW_ISSUER/" \
         | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | unhexlify \
         | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
     printf "%s\n" "$CLONED_KEY_FILE"
@@ -196,6 +213,7 @@ function clone_cert () {
 }
 
 
+# save all certificates in chain
 if [[ -f "$HOST" ]] ; then
     cat "$HOST" | parse_certs
 else
@@ -204,6 +222,7 @@ else
         parse_certs
 fi
 
+# clone them
 for certfile in `ls -r "$DIR/${CERTNAME}_"*` ; do
     CERT="$(cat $certfile)"
     number="${certfile##*_}"
