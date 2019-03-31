@@ -157,8 +157,17 @@ function clone_cert () {
     # issuer or no browser will allow an exception
     # it needs to stay the same length though
     if [[ ! -f $ISSUING_KEY ]] && [[ $ISSUER != $SUBJECT ]]; then
-        NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
-        echo $NEW_ISSUER $ISSUER
+        if [[ $ISSUER =~ I ]] ; then
+            NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/I/l/")
+        elif [[ $ISSUER =~ l ]] ; then
+            NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/l/I/")
+        elif [[ $ISSUER =~ O ]] ; then
+            NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/O/0/")
+        elif [[ $ISSUER =~ 0 ]] ; then
+            NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/0/O/")
+        else
+            NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
+        fi
     else
         NEW_ISSUER=$ISSUER
     fi
