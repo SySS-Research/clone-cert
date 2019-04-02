@@ -152,10 +152,14 @@ function clone_cert () {
         | sed 's/.* CN = //g')"
     ISSUER="$(openssl x509 -in "$CERT_FILE" -noout -issuer \
         | sed 's/.* CN = //g')"
+    SERIAL="$(openssl x509 -in "$CERT_FILE" -noout -serial \
+        | sed 's/serial=//g' | tr '[A-F]' '[a-f]')"
 
     # if it is not self-signed and we have no compromised CA, change the
-    # issuer or no browser will allow an exception
-    # it needs to stay the same length though
+    # issuer or no browser will allow an exception.
+    # it needs to stay the same length though.
+    # also, the serial needs to be changed, because browsers keep track of
+    # that.
     if [[ ! -f $ISSUING_KEY ]] && [[ $ISSUER != $SUBJECT ]]; then
         if [[ $ISSUER =~ I ]] ; then
             NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/I/l/")
@@ -168,8 +172,12 @@ function clone_cert () {
         else
             NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
         fi
+        SER_LEN=$(printf "%s" "$SERIAL" | wc -c)
+        SER_LEN=$((SER_LEN/2))
+        NEW_SERIAL=$(openssl rand -hex $SER_LEN)
     else
         NEW_ISSUER=$ISSUER
+        NEW_SERIAL=$SERIAL
     fi
     ISSUER=$(printf "%s" "$ISSUER" | hexlify)
     NEW_ISSUER=$(printf "%s" "$NEW_ISSUER" | hexlify)
@@ -197,7 +205,8 @@ function clone_cert () {
         -strparse 4 -noout -out >(hexlify))"
 
     OLD_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
-        | sed "s/$ISSUER/$NEW_ISSUER/")"
+        | sed "s/$ISSUER/$NEW_ISSUER/" \
+        | sed "s/$SERIAL/$NEW_SERIAL/" )"
     # create new signature
     NEW_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/")"
@@ -215,6 +224,7 @@ function clone_cert () {
     openssl x509 -in "$CERT_FILE" -outform DER | hexlify \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
         | sed "s/$ISSUER/$NEW_ISSUER/" \
+        | sed "s/$SERIAL/$NEW_SERIAL/" \
         | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | unhexlify \
         | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
     printf "%s\n" "$CLONED_KEY_FILE"
