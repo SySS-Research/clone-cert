@@ -10,10 +10,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$1" = "" ] ; then
 cat <<EOF
-Usage: $0 <host>:<port>|<pem-file> [<subject> <key>]
+Usage: $0 [<sni>@]<host>:<port>|<pem-file> [<subject> <key>]
 
 Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in $DIR. Their filenames make up the output of this script.
+
+The mandatory argument can either be a filename of an x509 certifcate in PEM
+format, or a host name and a port number separated by a colon. Optionally, you
+can precede this by a servername and an '@' if you want to specify the name
+of the virtual host via SNI.
 
 As optional parameters, you can specifiy the distinguished name of the
 subject of a certificate and the corresponding private key in PEM format.
@@ -46,8 +51,11 @@ set -u
 if [[ -f "$HOST" ]] ; then
     CERTNAME="$(basename "$HOST")"
 else
-    SERVER="$(printf "%s" "$HOST" | cut -f1 -d:)"
     CERTNAME="$HOST"
+    SNI="${HOST%%@*}"
+    if [ ! $SNI = $HOST ] ; then
+        HOST="${HOST##*@}"
+    fi
 fi
 rm -f "$DIR/${CERTNAME}_"*
 
@@ -236,9 +244,9 @@ function clone_cert () {
 if [[ -f "$HOST" ]] ; then
     cat "$HOST" | parse_certs
 else
-    openssl s_client -servername "$SERVER" \
+    openssl s_client -servername "$SNI" \
         -showcerts -connect "$HOST" < /dev/null 2>/dev/null | \
-        parse_certs
+         parse_certs
 fi
 
 # clone them
