@@ -78,9 +78,10 @@ function generate_ec_key () {
     local MY_PRIV_KEY="$2"
 
     openssl ecparam -name $EC_PARAM_NAME -genkey -out "$MY_PRIV_KEY" 2> /dev/null
-    offset="$(openssl ec -in eckey.pem 2> /dev/null | openssl asn1parse \
+    offset="$(openssl ec -in "$MY_PRIV_KEY" 2> /dev/null \
+        | openssl asn1parse \
         | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
-    NEW_MODULUS="$(openssl ec -in eckey.pem 2> /dev/null \
+    NEW_MODULUS="$(openssl ec -in "$MY_PRIV_KEY" 2> /dev/null \
         | openssl asn1parse -offset $offset -noout \
             -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
 
@@ -211,13 +212,14 @@ function clone_cert () {
         | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
     if [[ $OLD_MODULUS = "wrong algorithm type" ]] ; then
         # it's EC and not RSA
-        offset="$(openssl ec -in eckey.pem 2> /dev/null | openssl asn1parse \
+        offset="$(openssl x509 -in "$CERT_FILE" -pubkey -noout 2> /dev/null \
+            | openssl asn1parse \
             | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
-        OLD_MODULUS="$(openssl ec -in eckey.pem 2> /dev/null \
+        OLD_MODULUS="$(openssl x509 -in "$CERT_FILE" -pubkey -noout 2> /dev/null \
             | openssl asn1parse -offset $offset -noout \
                 -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
-        EC_OID="$(openssl ec -in eckey.pem -text -noout 2> /dev/null \
-            | grep OID | sed 's/.*: //')"
+        EC_OID="$(openssl x509 -in "$CERT_FILE" -text -noout \
+            | grep "ASN1 OID: " | sed 's/.*: //')"
         NEW_MODULUS="$(generate_ec_key "$EC_OID" "$CLONED_KEY_FILE")"
     else
         KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
