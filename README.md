@@ -1,13 +1,29 @@
 clone-cert.sh
 =============
 
-This is a simple shell script that retrieves the X.509 certificate associated
-with an SSL wrapped TCP port and uses `openssl` to create a similar
-certificate by replacing the RSA modulus and fixing the signature. This is
-particularly useful if you want to demonstrate why self-signed certificates
-cannot provide any security. Of course, the fingerprint of the cloned
-certificate will be different... but who checks the fingerprint of a
+This is a simple shell script that retrieves the X.509 certificate
+associated with a TLS wrapped TCP port and uses `openssl` to create a
+similar certificate by replacing the public key and fixing the signature.
+
+This is particularly useful if you want to demonstrate why self-signed
+certificates cannot provide any security. Of course, the fingerprint of the
+cloned certificate will be different... but who checks the fingerprint of a
 self-signed certificate by hand?
+
+You can also clone certificates that are not self-signed. In that case, the
+serial number is replaced by a newly generated one (because browsers keep
+track of the serial numbers they encounter and will notice that something
+fishy is going on), and the issuer is changed (for the same reason). The
+fake issuer will have the first capital letter O replace by a zero or a
+lower case L replaced by a one or have the last character replaced by a
+space and will thus look inconspicuous to a casual observer.
+
+The new fake issueing CA will be generated on the fly unless you provide
+one.
+
+Certificates containing either an RSA or an EC public key are supported.
+SNI is also supported. Run `./clone-cert.sh` for more information about the
+usage.
 
 Example
 -------
@@ -23,7 +39,7 @@ private key is in `/tmp/www.example.com:443_0.key`. Their difference is only in
 the RSA modulus and the signature:
 
 	$ diff <(openssl x509 -in /tmp/www.example.com:443_0.cert -noout -text) \
-           <(openssl s_client  -connect www.example.com:443 < /dev/null 2> /dev/null \
+           <(openssl s_client -connect www.example.com:443 < /dev/null 2> /dev/null \
              | openssl x509 -noout -text)
 	16,33c16,33
 	<                     00:c3:59:26:a5:ed:1c:2b:75:3a:0c:a2:ab:49:43:
@@ -96,3 +112,8 @@ the RSA modulus and the signature:
 	>          5c:04:55:64:ce:9d:b3:65:fd:f6:8f:5e:99:39:21:15:e2:71:
 	>          aa:6a:88:82
 
+
+Author
+------
+
+Adrian Vollmer, 2017-2019
