@@ -15,8 +15,8 @@ serial number is replaced by a newly generated one (because browsers keep
 track of the serial numbers they encounter and will notice that something
 fishy is going on), and the issuer is changed (for the same reason). The
 fake issuer will have the first capital letter O replace by a zero or a
-lower case L replaced by a one or have the last character replaced by a
-space and will thus look inconspicuous to a casual observer.
+lower case L replaced by a capital i or have the last character replaced by
+a space and will thus look inconspicuous to a casual observer.
 
 The new fake issueing CA will be generated on the fly unless you provide
 one.
