@@ -59,17 +59,31 @@ else
 fi
 rm -f "$DIR/${CERTNAME}_"*
 
-function generate_key () {
-    # create new private/public key pair (re-use private key if applicable)
+function generate_rsa_key () {
+    # create new RSA private/public key pair (re-use private key if applicable)
     local KEY_LEN="$1"
     local MY_PRIV_KEY="$2"
 
-    # TODO support DSA, EC
     openssl genrsa -out "$MY_PRIV_KEY" "$KEY_LEN" 2> /dev/null
 
     NEW_MODULUS="$(openssl rsa -in "$MY_PRIV_KEY" -pubout 2> /dev/null \
         | openssl rsa -pubin -noout -modulus \
         | sed 's/Modulus=//' | tr "[:upper:]" "[:lower:]" )"
+    printf "%s" "$NEW_MODULUS"
+}
+
+function generate_ec_key () {
+    # create new EC private/public key pair (re-use private key if applicable)
+    local EC_PARAM_NAME="$1"
+    local MY_PRIV_KEY="$2"
+
+    openssl ecparam -name $EC_PARAM_NAME -genkey -out "$MY_PRIV_KEY" 2> /dev/null
+    offset="$(openssl ec -in eckey.pem 2> /dev/null | openssl asn1parse \
+        | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
+    NEW_MODULUS="$(openssl ec -in eckey.pem 2> /dev/null \
+        | openssl asn1parse -offset $offset -noout \
+            -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
+
     printf "%s" "$NEW_MODULUS"
 }
 
@@ -125,9 +139,9 @@ function oid() {
         ;;#sha1WithRSAEncryption
         "300d06092a864886f70d01010c0500") echo sha384
         ;;#sha384WithRSAEncryption
-        "300a06082a8648ce3d040303") echo "ECDSA not supported" >&2; exit 1
+        "300a06082a8648ce3d040303") echo sha384
         ;;#ecdsa-with-SHA384
-        "300a06082a8648ce3d040302") echo "ECDSA not supported" >&2; exit 1
+        "300a06082a8648ce3d040302") echo sha256
         ;;#ecdsa-with-SHA256
         "300d06092a864886f70d0101040500") echo md5
         ;;#md5WithRSAEncryption
@@ -195,10 +209,22 @@ function clone_cert () {
 
     OLD_MODULUS="$(openssl x509 -in "$CERT_FILE" -modulus -noout \
         | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
-    KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
-        | grep Public-Key: | grep -o "[0-9]\+")"
+    if [[ $OLD_MODULUS = "wrong algorithm type" ]] ; then
+        # it's EC and not RSA
+        offset="$(openssl ec -in eckey.pem 2> /dev/null | openssl asn1parse \
+            | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
+        OLD_MODULUS="$(openssl ec -in eckey.pem 2> /dev/null \
+            | openssl asn1parse -offset $offset -noout \
+                -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
+        EC_OID="$(openssl ec -in eckey.pem -text -noout 2> /dev/null \
+            | grep OID | sed 's/.*: //')"
+        NEW_MODULUS="$(generate_ec_key "$EC_OID" "$CLONED_KEY_FILE")"
+    else
+        KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
+            | grep Public-Key: | grep -o "[0-9]\+")"
+        NEW_MODULUS="$(generate_rsa_key "$KEY_LEN" "$CLONED_KEY_FILE")"
+    fi
 
-    NEW_MODULUS="$(generate_key "$KEY_LEN" "$CLONED_KEY_FILE")"
 
     # extract old signature
     offset="$(openssl asn1parse -in "$CERT_FILE" | grep SEQUENCE \
