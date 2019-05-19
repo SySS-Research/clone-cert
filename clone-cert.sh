@@ -130,7 +130,12 @@ function parse_certs () {
             current_cert+="${current_cert:+$nl}$line"
 
             # ...and save it
-            printf "%s" "$current_cert" > "$DIR/${CERTNAME}_$counter"
+            if [ ! -z "$current_cert" ] ; then
+                printf "%s" "$current_cert" > "$DIR/${CERTNAME}_$counter"
+            else
+                echo "Error while parsing certificate" >&2
+                exit 1
+            fi
             counter=$((counter+=1))
 
             # no need to clone the other certs if we have no compromised CA
@@ -282,12 +287,37 @@ function clone_cert () {
         | openssl dgst -$digest -sign "$SIGNING_KEY" | hexlify)"
 
     # replace signature
-    openssl x509 -in "$CERT_FILE" -outform DER | hexlify \
-        | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
-        | sed "s/$ISSUER/$NEW_ISSUER/" \
-        | sed "s/$SERIAL/$NEW_SERIAL/" \
-        | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | unhexlify \
-        | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
+    if [ ${#NEW_SIGNATURE} = ${#OLD_SIGNATURE} ] ; then
+        openssl x509 -in "$CERT_FILE" -outform DER | hexlify \
+            | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
+            | sed "s/$ISSUER/$NEW_ISSUER/" \
+            | sed "s/$SERIAL/$NEW_SERIAL/" \
+            | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | unhexlify \
+            | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
+    else
+        # if the signatures have different lengths, simply replacing binary
+        # blobs won't work.
+        # TODO this causes it to be self-signed
+        STRDAY="$(date +%s --date="$(openssl x509 -noout -startdate -in "$CERT_FILE" \
+            | sed 's/^[^=]*=//')" ||:)"
+        ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CERT_FILE" \
+            | sed 's/^[^=]*=//')" ||:)"
+        DAYS=$(( ENDDAY/86400 - STRDAY/86400 ))
+        if which faketime > /dev/null ; then
+            faketime @$STRDAY \
+                openssl x509 -days $DAYS -in "$CERT_FILE" -signkey "$SIGNING_KEY" \
+                2> /dev/null > "$CLONED_CERT_FILE"
+        else
+            openssl x509 -days $DAYS -in "$CERT_FILE" -signkey "$SIGNING_KEY" \
+                2> /dev/null > "$CLONED_CERT_FILE"
+        fi
+    fi
+    if [ ! -s "$CLONED_CERT_FILE" ] ; then
+        echo "Cloning failed" >&2
+        rm "$CLONED_CERT_FILE"
+        rm "$CLONED_KEY_FILE"
+        exit 1
+    fi
     printf "%s\n" "$CLONED_KEY_FILE"
     printf "%s\n" "$CLONED_CERT_FILE"
 }
@@ -322,3 +352,4 @@ for certfile in `ls -r "$DIR/${CERTNAME}_"*` ; do
         fi
     fi
 done
+
