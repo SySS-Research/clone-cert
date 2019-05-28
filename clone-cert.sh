@@ -85,6 +85,7 @@ function generate_rsa_key () {
     # create new RSA private/public key pair (re-use private key if applicable)
     local KEY_LEN="$1"
     local MY_PRIV_KEY="$2"
+    local NEW_MODULUS=""
 
     openssl genrsa -out "$MY_PRIV_KEY" "$KEY_LEN" 2> /dev/null
 
@@ -202,6 +203,9 @@ function clone_cert () {
         | sed 's/.* CN = //g')"
     ISSUER="$(openssl x509 -in "$CERT_FILE" -noout -issuer \
         | sed 's/.* CN = //g')"
+    ISSUER_DN="$(openssl x509 -in "$CERT_FILE" -noout -issuer -nameopt compat \
+        | sed 's/^issuer=//')"
+
     SERIAL="$(openssl x509 -in "$CERT_FILE" -noout -serial \
         | sed 's/serial=//g' | tr '[A-F]' '[a-f]')"
 
@@ -234,8 +238,11 @@ function clone_cert () {
     fi
     ISSUER=$(printf "%s" "$ISSUER" | hexlify)
     NEW_ISSUER=$(printf "%s" "$NEW_ISSUER" | hexlify)
+    NEW_ISSUER_DN="$(echo "$ISSUER_DN" | hexlify | sed "s/$ISSUER/$NEW_ISSUER/" | unhexlify)"
     CLONED_CERT_FILE="${CERT_FILE}.cert"
     CLONED_KEY_FILE="${CERT_FILE}.key"
+    FAKE_ISSUER_KEY_FILE="${CERT_FILE}.CA.key"
+    FAKE_ISSUER_CERT_FILE="${CERT_FILE}.CA.cert"
 
 
     OLD_MODULUS="$(openssl x509 -in "$CERT_FILE" -modulus -noout \
@@ -252,9 +259,24 @@ function clone_cert () {
             | grep "ASN1 OID: " | sed 's/.*: //')"
         NEW_MODULUS="$(generate_ec_key "$EC_OID" "$CLONED_KEY_FILE")"
     else
+        # get the key length of the public key
         KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
             | grep Public-Key: | grep -o "[0-9]\+")"
         NEW_MODULUS="$(generate_rsa_key "$KEY_LEN" "$CLONED_KEY_FILE")"
+        # get the key length of the issuer (or length of the signature)
+        ISSUER_KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
+            -certopt ca_default -certopt no_validity \
+            -certopt no_serial -certopt no_subject -certopt no_extensions \
+            -certopt no_signame | tail -n+2 | tr -d ": \n" | wc -c)"
+        ISSUER_KEY_LEN=$((ISSUER_KEY_LEN/2*8))
+        if [ $ISSUER = $SUBJECT ] ; then
+            FAKE_ISSUER_KEY_FILE="$CLONED_KEY_FILE"
+            FAKE_ISSUER_CERT="$CLONED_CERT_FILE"
+        else
+            openssl req -x509 -new -nodes -newkey rsa:$ISSUER_KEY_LEN \
+                -keyout "$FAKE_ISSUER_KEY_FILE" -days 1024 -out "$FAKE_ISSUER_CERT_FILE" \
+                -sha256  -subj "$NEW_ISSUER_DN" 2> /dev/null
+        fi
     fi
 
 
@@ -281,10 +303,10 @@ function clone_cert () {
     if [[ -f $ISSUING_KEY ]] ; then
         SIGNING_KEY="$ISSUING_KEY"
     else
-        SIGNING_KEY="$CLONED_KEY_FILE"
+        SIGNING_KEY="$FAKE_ISSUER_KEY_FILE"
     fi
     NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | unhexlify \
-        | openssl dgst -$digest -sign "$SIGNING_KEY" | hexlify)"
+        | openssl dgst -$digest | openssl pkeyutl -sign "$SIGNING_KEY" | hexlify)"
 
     # replace signature
     if [ ${#NEW_SIGNATURE} = ${#OLD_SIGNATURE} ] ; then
@@ -292,7 +314,8 @@ function clone_cert () {
             | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
             | sed "s/$ISSUER/$NEW_ISSUER/" \
             | sed "s/$SERIAL/$NEW_SERIAL/" \
-            | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" | unhexlify \
+            | sed "s/$OLD_SIGNATURE/$NEW_SIGNATURE/" \
+            | unhexlify \
             | openssl x509 -inform DER -outform PEM > "$CLONED_CERT_FILE"
     else
         # if the signatures have different lengths, simply replacing binary
