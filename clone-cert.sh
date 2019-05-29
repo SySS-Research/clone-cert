@@ -319,6 +319,7 @@ function clone_cert () {
         # if the signatures have different lengths, simply replacing binary
         # blobs won't work.
         # TODO this causes it to be self-signed
+        echo "Warning: Signature lengths don't match" >&2
         STRDAY="$(date +%s --date="$(openssl x509 -noout -startdate -in "$CERT_FILE" \
             | sed 's/^[^=]*=//')" ||:)"
         ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CERT_FILE" \
