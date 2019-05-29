@@ -261,7 +261,7 @@ function clone_cert () {
         KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
             | grep Public-Key: | grep -o "[0-9]\+")"
         NEW_MODULUS="$(generate_rsa_key "$KEY_LEN" "$CLONED_KEY_FILE")"
-        # get the key length of the issuer (or length of the signature)
+        # get the key length of the issuer's key (same as length of the signature)
         ISSUER_KEY_LEN="$(openssl x509  -in "$CERT_FILE" -noout -text \
             -certopt ca_default -certopt no_validity \
             -certopt no_serial -certopt no_subject -certopt no_extensions \
@@ -271,9 +271,11 @@ function clone_cert () {
             FAKE_ISSUER_KEY_FILE="$CLONED_KEY_FILE"
             FAKE_ISSUER_CERT="$CLONED_CERT_FILE"
         else
-            openssl req -x509 -new -nodes -newkey rsa:$ISSUER_KEY_LEN \
-                -keyout "$FAKE_ISSUER_KEY_FILE" -days 1024 -out "$FAKE_ISSUER_CERT_FILE" \
-                -sha256  -subj "$NEW_ISSUER_DN" 2> /dev/null
+            openssl req -x509 -new -nodes -days 1024 -sha256 \
+                -newkey rsa:$ISSUER_KEY_LEN \
+                -subj "$NEW_ISSUER_DN" \
+                -keyout "$FAKE_ISSUER_KEY_FILE" \
+                -out "$FAKE_ISSUER_CERT_FILE" 2> /dev/null
         fi
     fi
 
@@ -303,8 +305,9 @@ function clone_cert () {
     else
         SIGNING_KEY="$FAKE_ISSUER_KEY_FILE"
     fi
-    NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | unhexlify \
-        | openssl dgst -$digest | openssl pkeyutl -sign "$SIGNING_KEY" | hexlify)"
+    NEW_SIGNATURE="$(printf "%s" "$OLD_TBS_CERTIFICATE" | unhexlify \
+        | openssl $digest -sign $SIGNING_KEY \
+        | hexlify)"
 
     # replace signature
     if [ ${#NEW_SIGNATURE} = ${#OLD_SIGNATURE} ] ; then
@@ -327,11 +330,12 @@ function clone_cert () {
         DAYS=$(( ENDDAY/86400 - STRDAY/86400 ))
         if which faketime > /dev/null ; then
             faketime @$STRDAY \
-                openssl x509 -days $DAYS -in "$CERT_FILE" -signkey "$SIGNING_KEY" \
+                openssl x509 -days $DAYS -in "$CERT_FILE" \
+                -$digest -signkey "$SIGNING_KEY" \
                 2> /dev/null > "$CLONED_CERT_FILE"
         else
             openssl x509 -days $DAYS -in "$CERT_FILE" -signkey "$SIGNING_KEY" \
-                2> /dev/null > "$CLONED_CERT_FILE"
+                -$digest 2> /dev/null > "$CLONED_CERT_FILE"
         fi
     fi
     if [ ! -s "$CLONED_CERT_FILE" ] ; then
