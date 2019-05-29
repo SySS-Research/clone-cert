@@ -226,12 +226,10 @@ function clone_cert () {
         else
             NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
         fi
-        SER_LEN=$(printf "%s" "$SERIAL" | wc -c)
-        SER_LEN=$((SER_LEN/2))
-        NEW_SERIAL=$(openssl rand -hex $SER_LEN)
         # avoid negative serial number
-        # if very first bit 1, change it
-        NEW_SERIAL=$(echo $NEW_SERIAL | sed 's/^[4-9a-f]/3/')
+        # only change 16 hex digits in the middle
+        NEW_SERIAL=$(openssl rand -hex 8)
+        NEW_SERIAL=$(echo $SERIAL | sed "s/.\{16\}\(.\{4\}\)\$/$NEW_SERIAL\1/")
     else
         NEW_ISSUER=$ISSUER
         NEW_SERIAL=$SERIAL
