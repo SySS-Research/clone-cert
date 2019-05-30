@@ -334,12 +334,12 @@ function clone_cert () {
     OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$CERT_FILE" \
         -strparse 4 -noout -out >(hexlify))"
 
-    OLD_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
-        | sed "s/$ISSUER/$NEW_ISSUER/" \
-        | sed "s/$SERIAL/$NEW_SERIAL/" )"
     # create new signature
     NEW_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
+        | sed "s/$ISSUER/$NEW_ISSUER/" \
+        | sed "s/$SERIAL/$NEW_SERIAL/" \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/")"
+    # TODO replace Authority Key Identifier too
 
     digest="$(oid "$SIGNING_ALGO")"
     if [[ -f $ISSUING_KEY ]] ; then
@@ -347,7 +347,7 @@ function clone_cert () {
     else
         SIGNING_KEY="$FAKE_ISSUER_KEY_FILE"
     fi
-    NEW_SIGNATURE="$(printf "%s" "$OLD_TBS_CERTIFICATE" | unhexlify \
+    NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | unhexlify \
         | openssl $digest -sign $SIGNING_KEY \
         | hexlify)"
 
