@@ -354,6 +354,7 @@ if [[ -f "$HOST" ]] ; then
     cat "$HOST" | parse_certs
 else
     openssl s_client -servername "$SNI" \
+        -verify 5 \
         -showcerts -connect "$HOST" < /dev/null 2>/dev/null | \
          parse_certs
 fi
