@@ -311,7 +311,7 @@ function clone_cert () {
         ISSUER_KEY_LEN=$((ISSUER_KEY_LEN/2*8))
         if [ $ISSUER = $SUBJECT ] ; then
             FAKE_ISSUER_KEY_FILE="$CLONED_KEY_FILE"
-            FAKE_ISSUER_CERT="$CLONED_CERT_FILE"
+            FAKE_ISSUER_CERT_FILE="$CLONED_CERT_FILE"
         else
             openssl req -x509 -new -nodes -days 1024 -sha256 \
                 -newkey rsa:$ISSUER_KEY_LEN \
@@ -321,6 +321,13 @@ function clone_cert () {
         fi
     fi
 
+    OLD_AUTH_KEY_IDENTIFIER="$(openssl asn1parse -in "$CERT_FILE" \
+        | grep -A1 ":X509v3 Authority Key Identifier" | tail -n1 \
+        | sed 's/.*\[HEX DUMP\]://' | tr '[:upper:]' '[:lower:]')"
+
+    NEW_AUTH_KEY_IDENTIFIER="$(openssl asn1parse -in "$FAKE_ISSUER_CERT_FILE" \
+        | grep -A1 ":X509v3 Subject Key Identifier" | tail -n1 \
+        | sed 's/.*\[HEX DUMP\]://' | tr '[:upper:]' '[:lower:]')"
 
     # extract old signature
     offset="$(openssl asn1parse -in "$CERT_FILE" | grep SEQUENCE \
@@ -338,6 +345,7 @@ function clone_cert () {
     NEW_TBS_CERTIFICATE="$(printf "%s" "$OLD_TBS_CERTIFICATE" \
         | sed "s/$ISSUER/$NEW_ISSUER/" \
         | sed "s/$SERIAL/$NEW_SERIAL/" \
+        | sed "s/$OLD_AUTH_KEY_IDENTIFIER/$NEW_AUTH_KEY_IDENTIFIER/" \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/")"
     # TODO replace Authority Key Identifier too
 
@@ -362,10 +370,13 @@ function clone_cert () {
     OLD_CERT_LENGTH="$(printf "%04x" $OLD_CERT_LENGTH)"
     NEW_CERT_LENGTH="$(printf "%04x" $NEW_CERT_LENGTH)"
 
+    OLD_AUTH_KEY_IDENTIFIER=$((${#OLD_AUTH_KEY_IDENTIFIER}/2))$OLD_AUTH_KEY_IDENTIFIER
+    NEW_AUTH_KEY_IDENTIFIER=$((${#NEW_AUTH_KEY_IDENTIFIER}/2))$NEW_AUTH_KEY_IDENTIFIER
     openssl x509 -in "$CERT_FILE" -outform DER | hexlify \
         | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
         | sed "s/$ISSUER/$NEW_ISSUER/" \
         | sed "s/$SERIAL/$NEW_SERIAL/" \
+        | sed "s/$OLD_AUTH_KEY_IDENTIFIER/$NEW_AUTH_KEY_IDENTIFIER/" \
         | sed "s/$OLD_ASN1_SIG/$NEW_ASN1_SIG/" \
         | sed "s/^\(....\)$OLD_CERT_LENGTH/\1$NEW_CERT_LENGTH/" \
         | unhexlify \
