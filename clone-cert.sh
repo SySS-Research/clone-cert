@@ -95,15 +95,9 @@ for i in "$@" ; do
     esac
 done
 
-if [ ! -z $GIVEN_CA -a -z $GIVEN_KEY ] ; then
-    echo "Error: <CA CERT> used but no private key given" >&2
-    exit 1
-fi
-
 # set some variables
 HOST="$1"
 COMPROMISED_CA="$2"
-COMPROMISED_KEY="$3"
 mkdir -p "$DIR"
 
 EC_PARAMS=$(cat <<'END_HEREDOC'
@@ -121,13 +115,6 @@ MwhwVT5cQUypJhlBhmEZf6wQRx2x04EIXdrdtYeWgpypAGkCAQE=
 END_HEREDOC
 )
 
-
-if [[ ! -z $COMPROMISED_KEY ]] ; then
-    if [[ ! -f $COMPROMISED_KEY ]] ; then
-        echo "File not found: $COMPROMISED_KEY" >&2
-        exit 1
-    fi
-fi
 
 set -u
 
@@ -471,7 +458,7 @@ function clone_cert () {
         rm "$CLONED_KEY"
         exit 1
     fi
-    sanity-check
+    sanity-check || ( rm -rf "$CLONED_KEY" "$CLONED_CERT" ; exit 1)
     printf "%s\n" "$CLONED_KEY"
     printf "%s\n" "$CLONED_CERT"
 }
@@ -481,9 +468,9 @@ function sanity-check () {
     # check whether the key pair matches, and whether the cert validates
     diff -q <(openssl x509 -in "$CLONED_CERT" -pubkey -noout 2> /dev/null ) \
         <(openssl $SCHEME -in "$CLONED_KEY" -pubout 2> /dev/null) \
-        || ( echo Key mismatch, probably due to a bug >&2; exit 1 )
+        || ( echo Key mismatch, probably due to a bug >&2; return 1 )
     openssl verify -CAfile "$FAKE_ISSUER_CERT" "$CLONED_CERT" > /dev/null \
-        || ( echo Verification failed, probably due to a bug >&2; exit 1 )
+        || ( echo Verification failed, probably due to a bug >&2; return 1 )
 }
 
 function main () {
