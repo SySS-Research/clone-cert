@@ -34,11 +34,12 @@ DEBUG=false
 function usage(){
 cat <<EOF
 Usage: $0 [options] [<sni>@]<host>:<port>|<pem-file>
+(Author: Adrian Vollmer, SySS GmbH 2017-2019)
 
 Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in <DIR>. Their filenames make up the output of this script.
 
-The mandatory argument can either be a filename of an x509 certifcate in PEM
+The mandatory argument can either be the path of an x509 certifcate in PEM
 format, or a host name and a port number separated by a colon. Optionally, you
 can precede this by a servername and an '@' if you want to specify the name
 of the virtual host via SNI.
