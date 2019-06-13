@@ -77,6 +77,8 @@ if [ "$1" = "" ] ; then
     exit 1
 fi
 
+ISSUER_CERT=""
+ISSUER_KEY=""
 REUSE_KEYS=false
 for i in "$@" ; do
     case $i in
