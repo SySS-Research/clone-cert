@@ -38,6 +38,7 @@ Usage: $0 [options] [<sni>@]<host>:<port>|<pem-file>
 
 Clone an X509 certificate. The cloned certificate and the corresponding key
 will be located in <DIR>. Their filenames make up the output of this script.
+openssl>=1.1.1 is required.
 
 The mandatory argument can either be the path of an x509 certifcate in PEM
 format, or a host name and a port number separated by a colon. Optionally, you
