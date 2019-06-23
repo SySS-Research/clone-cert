@@ -313,6 +313,12 @@ function extract-values () {
     SUBJECT_DN="$(openssl x509 -in "$CERT" -noout -subject -nameopt compat \
         | sed 's/^subject=//')"
 
+    if [[ ! $ISSUER_DN =~ ^/ ]] ; then # openssl < 1.1.1
+        debug "Fixing DNs because OpenSSL version is under 1.1.1"
+        ISSUER_DN="$(echo "/$ISSUER_DN" | sed 's/, /\//g')"
+        SUBJECT_DN="$(echo "/$SUBJECT_DN" | sed 's/, /\//g')"
+    fi
+
     SELF_SIGNED=false
     [[ $ISSUER_DN = $SUBJECT_DN ]] && SELF_SIGNED=true
     debug "self-signed: $SELF_SIGNED"
@@ -322,7 +328,17 @@ function extract-values () {
 
     AUTH_KEY_IDENTIFIER="$(openssl asn1parse -in "$CERT" \
         | grep -A1 ":X509v3 Authority Key Identifier" | tail -n1 \
-        | sed 's/.*\[HEX DUMP\]://')"
+        | sed 's/.*\[HEX DUMP\]://' \
+        | sed 's/^.\{8\}//')"
+    debug "Original AuthKeyIdentifier: $AUTH_KEY_IDENTIFIER"
+}
+
+function create-fake-CA () {
+    openssl req -x509 -new -nodes -days 1024 -sha256 \
+        -subj "$NEW_ISSUER_DN" \
+        -config <(cat /etc/ssl/openssl.cnf |sed "s/subjectKeyIdentifier=hash/subjectKeyIdentifier=$AUTH_KEY_IDENTIFIER/") \
+        $@ \
+        -out "$FAKE_ISSUER_CERT" 2> /dev/null
 }
 
 function clone_cert () {
@@ -382,19 +398,10 @@ function clone_cert () {
             FAKE_ISSUER_CERT="$CLONED_CERT"
         else
             if [[ $REUSE_KEYS = true ]] && [[ -f "$DIR/EC" ]] ; then
-                openssl req -x509 -new -nodes -days 1024 -sha256 \
-                    -subj "$NEW_ISSUER_DN" \
-                    -addext subjectKeyIdentifier="$AUTH_KEY_IDENTIFIER" \
-                    -key "$DIR/EC" \
-                    -out "$FAKE_ISSUER_CERT" 2> /dev/null
+                create-fake-CA -key "$DIR/EC"
                 FAKE_ISSUER_KEY="$DIR/EC"
             else
-                openssl req -x509 -new -nodes -days 1024 -sha256 \
-                    -newkey ec:<(echo "$EC_PARAMS") \
-                    -subj "$NEW_ISSUER_DN" \
-                    -addext subjectKeyIdentifier="$AUTH_KEY_IDENTIFIER" \
-                    -keyout "$FAKE_ISSUER_KEY" \
-                    -out "$FAKE_ISSUER_CERT" 2> /dev/null
+                create-fake-CA -keyout "$FAKE_ISSUER_KEY"
             fi
         fi
     else
@@ -408,19 +415,10 @@ function clone_cert () {
             FAKE_ISSUER_CERT="$CLONED_CERT"
         else
             if [[ $REUSE_KEYS = true ]] && [[ -f "$DIR/RSA_2048" ]] ; then
-                openssl req -x509 -new -nodes -days 1024 -sha256 \
-                    -subj "$NEW_ISSUER_DN" \
-                    -addext subjectKeyIdentifier="$AUTH_KEY_IDENTIFIER" \
-                    -key "$DIR/RSA_2048" \
-                    -out "$FAKE_ISSUER_CERT" 2> /dev/null
+                create-fake-CA -key "$DIR/RSA_2048"
                 FAKE_ISSUER_KEY="$DIR/RSA_2048"
             else
-                openssl req -x509 -new -nodes -days 1024 -sha256 \
-                    -subj "$NEW_ISSUER_DN" \
-                    -addext subjectKeyIdentifier="$AUTH_KEY_IDENTIFIER" \
-                    -newkey rsa:2048 \
-                    -keyout "$FAKE_ISSUER_KEY" \
-                    -out "$FAKE_ISSUER_CERT" 2> /dev/null
+                create-fake-CA -keyout "$FAKE_ISSUER_KEY"
             fi
         fi
     fi
@@ -506,6 +504,9 @@ function return-result () {
 
 function sanity-check () {
     # check whether the key pair matches, and whether the cert validates
+    debug "$(diff \
+        <(openssl x509 -noout -text -in $CLONED_CERT) \
+        <(openssl x509 -noout -text -in $CERT))"
     diff -q <(openssl x509 -in "$CLONED_CERT" -pubkey -noout 2> /dev/null ) \
         <(openssl $SCHEME -in "$CLONED_KEY" -pubout 2> /dev/null) \
         || ( echo Key mismatch, probably due to a bug >&2; return 1 )
