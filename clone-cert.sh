@@ -336,7 +336,7 @@ function extract-values () {
 function create-fake-CA () {
     openssl req -x509 -new -nodes -days 1024 -sha256 \
         -subj "$NEW_ISSUER_DN" \
-        -config <(cat /etc/ssl/openssl.cnf |sed "s/subjectKeyIdentifier=hash/subjectKeyIdentifier=$AUTH_KEY_IDENTIFIER/") \
+        -config <(cat /etc/ssl/openssl.cnf |sed "s/.*subjectKeyIdentifier.*=.*hash/subjectKeyIdentifier=$AUTH_KEY_IDENTIFIER/") \
         $@ \
         -out "$FAKE_ISSUER_CERT" 2> /dev/null
 }
