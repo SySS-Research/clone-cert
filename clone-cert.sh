@@ -429,8 +429,13 @@ function clone_cert () {
         # sign it regularly with given cert
         FAKE_ISSUER_KEY="$ISSUER_KEY"
         FAKE_ISSUER_CERT="$ISSUER_CERT"
+        ISSUER_KEY_IDENTIFIER="$(openssl x509 -in "$ISSUER_CERT" -ext subjectKeyIdentifier -noout \
+            | sed -ne '2s/[ :]//gp' | tr '[A-F]' '[a-f]')"
+        AUTH_KEY_IDENTIFIER="$(openssl x509 -in "$CERT" -ext authorityKeyIdentifier -noout \
+            | sed -ne '2s/[ :]\|keyid//gp' | tr '[A-F]' '[a-f]')"
         openssl x509 -in "$CERT" -outform DER | hexlify \
             | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
+            | sed "s/$AUTH_KEY_IDENTIFIER/$ISSUER_KEY_IDENTIFIER/" \
             | unhexlify \
             | openssl x509 -days 356 -inform DER -CAkey "$ISSUER_KEY" \
                 -CA "$ISSUER_CERT" -CAcreateserial \
