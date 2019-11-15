@@ -515,6 +515,7 @@ function sanity-check () {
     diff -q <(openssl x509 -in "$CLONED_CERT" -pubkey -noout 2> /dev/null ) \
         <(openssl $SCHEME -in "$CLONED_KEY" -pubout 2> /dev/null) \
         || ( echo Key mismatch, probably due to a bug >&2; return 1 )
+    if [[ $SELF_SIGNED = true ]] ; then return 0 ; fi
     openssl verify -CAfile "$FAKE_ISSUER_CERT" "$CLONED_CERT" > /dev/null \
         || ( echo Verification failed, probably due to a bug >&2; return 1 )
 }
