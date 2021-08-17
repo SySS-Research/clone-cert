@@ -64,6 +64,10 @@ Optional parameters:
     -k=<KEY>, --key=<KEY>:
         The path to a key in PEM format matching <CERT>
 
+    --keep-issuer-name:
+        Does not alter the issuer name, which is done otherwise to
+        trick browsers.
+
     --debug:
         Print debug messages
 
@@ -81,6 +85,7 @@ fi
 ISSUER_CERT=""
 ISSUER_KEY=""
 REUSE_KEYS=false
+KEEP_ISSUER_NAME=false
 for i in "$@" ; do
     case $i in
             -d=*|--directory=*)
@@ -97,6 +102,10 @@ for i in "$@" ; do
         ;;
             -r|--reuse-keys)
             REUSE_KEYS=true
+            shift # past argument=value
+        ;;
+            --keep-issuer-name)
+            KEEP_ISSUER_NAME=true
             shift # past argument=value
         ;;
             --debug)
@@ -348,9 +357,7 @@ function clone_cert () {
     # if it is not self-signed and we have no compromised CA, change the
     # issuer or no browser will allow an exception.
     # it needs to stay the same length though.
-    # also, the serial needs to be changed, because browsers keep track of
-    # that.
-    if [[ $SELF_SIGNED = false ]]; then
+    if [[ $SELF_SIGNED = false && $KEEP_ISSUER_NAME = false ]]; then
         if [[ $ISSUER =~ I ]] ; then
             NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/I/l/")
         elif [[ $ISSUER =~ l ]] ; then
@@ -362,14 +369,21 @@ function clone_cert () {
         else
             NEW_ISSUER=$(printf "%s" "$ISSUER" | sed "s/.$/ /")
         fi
+    else
+        NEW_ISSUER=$ISSUER
+    fi
+
+    # if it is not self-signed, the serial needs to be changed, too
+    # because browsers keep track of that
+    if [[ $SELF_SIGNED = false ]]; then
         # avoid negative serial number
         # only change 16 hex digits in the middle
         NEW_SERIAL=$(openssl rand -hex 8)
         NEW_SERIAL=$(printf "%s" "$SERIAL" | sed "s/.\{16\}\(.\{4\}\)\$/$NEW_SERIAL\1/")
     else
-        NEW_ISSUER=$ISSUER
         NEW_SERIAL=$SERIAL
     fi
+
     ISSUER=$(printf "%s" "$ISSUER" | hexlify)
     NEW_ISSUER=$(printf "%s" "$NEW_ISSUER" | hexlify)
     NEW_ISSUER_DN="$(printf "%s" "$ISSUER_DN" | hexlify | sed "s/$ISSUER/$NEW_ISSUER/" | unhexlify)"
