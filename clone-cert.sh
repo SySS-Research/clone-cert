@@ -83,7 +83,7 @@ function die () {
 }
 
 function debug () {
-    if [ $DEBUG = true ] ; then
+    if [[ $DEBUG = true ]] ; then
         echo "$1" >&2
     fi
 }
@@ -133,7 +133,7 @@ for i in "$@" ; do
     esac
 done
 
-if [ "$1" = "" ] ; then
+if [[ "$1" = "" ]] ; then
     usage
     exit 1
 fi
@@ -168,7 +168,7 @@ else
     fi
     CERTNAME="$HOST"
     SNI="${HOST%%@*}"
-    if [ ! $SNI = $HOST ] ; then
+    if [[ ! "$SNI" = "$HOST" ]] ; then
         HOST="${HOST##*@}"
     fi
 fi
@@ -205,7 +205,7 @@ function generate_ec_key () {
         cp "$DIR/EC" "$MY_PRIV_KEY"
     else
         debug "Generating EC key"
-        openssl ecparam -name $EC_PARAM_NAME -genkey -out "$MY_PRIV_KEY" 2> /dev/null
+        openssl ecparam -name "$EC_PARAM_NAME" -genkey -out "$MY_PRIV_KEY" 2> /dev/null
         cp "$MY_PRIV_KEY" "$DIR/EC"
     fi
 
@@ -213,7 +213,7 @@ function generate_ec_key () {
         | openssl asn1parse \
         | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
     NEW_MODULUS="$(openssl ec -in "$MY_PRIV_KEY" 2> /dev/null \
-        | openssl asn1parse -offset $offset -noout \
+        | openssl asn1parse -offset "$offset" -noout \
             -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
 
     printf "%s" "$NEW_MODULUS"
@@ -239,7 +239,7 @@ function parse_certs () {
             current_cert+="${current_cert:+$nl}$line"
 
             # ...and save it
-            if [ ! -z "$current_cert" ] ; then
+            if [[ -n "$current_cert" ]] ; then
                 printf "%s" "$current_cert" > "$DIR/${CERTNAME}_$counter"
             else
                 die "Error while parsing certificate"
@@ -300,16 +300,16 @@ function asn1-bitstring(){
     # https://docs.microsoft.com/en-us/windows/desktop/seccertenroll/about-bit-string
     data=$1
     len=$((${#data}/2+1))
-    if [ $len -le 127 ] ; then
+    if [[ "$len" -le 127 ]] ; then
         len=$(printf "%02x" $len)
     else
-        if [ $len -lt 256 ] ; then
-            len=$(printf "81%02x" $len)
+        if [[ "$len" -lt 256 ]] ; then
+            len=$(printf "81%02x" "$len")
         else
-            len=$(printf "82%04x" $len)
+            len=$(printf "82%04x" "$len")
         fi
     fi
-    printf "03%s00%s" $len $data
+    printf "03%s00%s" "$len" "$data"
 }
 
 function extract-values () {
@@ -330,11 +330,11 @@ function extract-values () {
     fi
 
     SELF_SIGNED=false
-    [[ $ISSUER_DN = $SUBJECT_DN ]] && SELF_SIGNED=true
+    [[ $ISSUER_DN = "$SUBJECT_DN" ]] && SELF_SIGNED=true
     debug "self-signed: $SELF_SIGNED"
 
     SERIAL="$(openssl x509 -in "$CERT" -noout -serial \
-        | sed 's/serial=//g' | tr '[A-F]' '[a-f]')"
+        | sed 's/serial=//g' | tr 'A-F' 'a-f')"
 
     AUTH_KEY_IDENTIFIER="$(openssl asn1parse -in "$CERT" \
         | grep -A1 ":X509v3 Authority Key Identifier" | tail -n1 \
@@ -346,8 +346,8 @@ function extract-values () {
 function create-fake-CA () {
     openssl req -x509 -new -nodes -days 1024 -sha256 \
         -subj "$NEW_ISSUER_DN" \
-        -config <(cat /etc/ssl/openssl.cnf |sed "s/.*subjectKeyIdentifier.*=.*hash/subjectKeyIdentifier=$AUTH_KEY_IDENTIFIER/") \
-        $@ \
+        -config <(sed "s/.*subjectKeyIdentifier.*=.*hash/subjectKeyIdentifier=$AUTH_KEY_IDENTIFIER/" /etc/ssl/openssl.cnf) \
+        "$@" \
         -out "$FAKE_ISSUER_CERT" 2> /dev/null
 }
 
@@ -403,7 +403,7 @@ function clone_cert () {
             | openssl asn1parse \
             | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/')"
         OLD_MODULUS="$(openssl x509 -in "$CERT" -pubkey -noout 2> /dev/null \
-            | openssl asn1parse -offset $offset -noout \
+            | openssl asn1parse -offset "$offset" -noout \
                 -out >(dd bs=1 skip=2 2> /dev/null | hexlify))"
         EC_OID="$(openssl x509 -in "$CERT" -text -noout \
             | grep "ASN1 OID: " | sed 's/.*: //')"
@@ -438,14 +438,14 @@ function clone_cert () {
         fi
     fi
 
-    if [ ! -z "$ISSUER_CERT" -a ! -z "$ISSUER_KEY" ] ; then
+    if [[ -n "$ISSUER_CERT" && -n "$ISSUER_KEY" ]] ; then
         # sign it regularly with given cert
         FAKE_ISSUER_KEY="$ISSUER_KEY"
         FAKE_ISSUER_CERT="$ISSUER_CERT"
         ISSUER_KEY_IDENTIFIER="$(openssl x509 -in "$ISSUER_CERT" -ext subjectKeyIdentifier -noout \
-            | sed -ne '2s/[ :]//gp' | tr '[A-F]' '[a-f]')"
+            | sed -ne '2s/[ :]//gp' | tr 'A-F' 'a-f')"
         AUTH_KEY_IDENTIFIER="$(openssl x509 -in "$CERT" -ext authorityKeyIdentifier -noout \
-            | sed -ne '2s/[ :]\|keyid//gp' | tr '[A-F]' '[a-f]')"
+            | sed -ne '2s/[ :]\|keyid//gp' | tr 'A-F' 'a-f')"
         openssl x509 -in "$CERT" -outform DER | hexlify \
             | sed "s/$OLD_MODULUS/$NEW_MODULUS/" \
             | sed "s/$AUTH_KEY_IDENTIFIER/$ISSUER_KEY_IDENTIFIER/" \
@@ -455,7 +455,7 @@ function clone_cert () {
                 -out "$CLONED_CERT"  2> /dev/null
         return-result
     else
-        if [ ! -z "$ISSUER_CERT" -o ! -z "$ISSUER_KEY" ] ; then
+        if [[ -n "$ISSUER_CERT" || -n "$ISSUER_KEY" ]] ; then
             die "If you provide one of <KEY> or <CERT>, you must also provide the other"
         fi
     fi
@@ -465,11 +465,11 @@ function clone_cert () {
     offset="$(openssl asn1parse -in "$CERT" | grep SEQUENCE \
         | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
     SIGNING_ALGO="$(openssl asn1parse -in "$CERT" \
-        -strparse $offset -noout -out >(hexlify))"
+        -strparse "$offset" -noout -out >(hexlify))"
     offset="$(openssl asn1parse -in "$CERT" \
         | tail -n1 |sed 's/ \+\([0-9]\+\):.*/\1/' | head -n1)"
     OLD_SIGNATURE="$(openssl asn1parse -in "$CERT" \
-        -strparse $offset -noout -out >(hexlify))"
+        -strparse "$offset" -noout -out >(hexlify))"
     OLD_TBS_CERTIFICATE="$(openssl asn1parse -in "$CERT" \
         -strparse 4 -noout -out >(hexlify))"
 
@@ -481,12 +481,12 @@ function clone_cert () {
 
     digest="$(oid "$SIGNING_ALGO")"
     NEW_SIGNATURE="$(printf "%s" "$NEW_TBS_CERTIFICATE" | unhexlify \
-        | openssl $digest -sign "$FAKE_ISSUER_KEY" \
+        | openssl "$digest" -sign "$FAKE_ISSUER_KEY" \
         | hexlify)"
 
     # replace signature, compute new asn1 length
-    OLD_ASN1_SIG=$(asn1-bitstring $OLD_SIGNATURE)
-    NEW_ASN1_SIG=$(asn1-bitstring $NEW_SIGNATURE)
+    OLD_ASN1_SIG=$(asn1-bitstring "$OLD_SIGNATURE")
+    NEW_ASN1_SIG=$(asn1-bitstring "$NEW_SIGNATURE")
 
     OLD_CERT_LENGTH="$(openssl x509 -in "$CERT" -outform der \
         | dd bs=2 skip=1 count=1 2> /dev/null | hexlify)"
@@ -506,7 +506,7 @@ function clone_cert () {
         | unhexlify \
         | openssl x509 -inform DER -outform PEM > "$CLONED_CERT"
 
-    if [ ! -s "$CLONED_CERT" ] ; then
+    if [[ ! -s "$CLONED_CERT" ]] ; then
         rm "$CLONED_CERT"
         rm "$CLONED_KEY"
         die "Cloning failed"
@@ -524,8 +524,8 @@ function return-result () {
 function sanity-check () {
     # check whether the key pair matches, and whether the cert validates
     debug "$(diff \
-        <(openssl x509 -noout -text -in $CLONED_CERT) \
-        <(openssl x509 -noout -text -in $CERT))"
+        <(openssl x509 -noout -text -in "$CLONED_CERT") \
+        <(openssl x509 -noout -text -in "$CERT"))"
     diff -q <(openssl x509 -in "$CLONED_CERT" -pubkey -noout 2> /dev/null ) \
         <(openssl $SCHEME -in "$CLONED_KEY" -pubout 2> /dev/null) \
         || ( echo Key mismatch, probably due to a bug >&2; return 1 )
