@@ -56,7 +56,7 @@ Optional parameters:
 
     -c=<CERT>, --cert=<CERT>:
         The path to a certificate in PEM format with which to sign the host
-        certificate. The result will then not be cloned (i.e. seem fields
+        certificate. The result will then not be cloned (i.e. some fields
         will be different, in particular the issuer), but it will be a valid
         certificate which will be trusted by the victim if they trust
         <CERT>. You must supply a matching <KEY>.
@@ -77,10 +77,16 @@ Optional parameters:
 EOF
 }
 
-if [ "$1" = "" ] ; then
-    usage
+function die () {
+    echo "$1" >&2
     exit 1
-fi
+}
+
+function debug () {
+    if [ $DEBUG = true ] ; then
+        echo "$1" >&2
+    fi
+}
 
 ISSUER_CERT=""
 ISSUER_KEY=""
@@ -127,6 +133,11 @@ for i in "$@" ; do
     esac
 done
 
+if [ "$1" = "" ] ; then
+    usage
+    exit 1
+fi
+
 # set some variables
 HOST="$1"
 mkdir -p "$DIR"
@@ -152,6 +163,9 @@ set -u
 if [[ -f "$HOST" ]] ; then
     CERTNAME="$(basename "$HOST")"
 else
+    if [[ "$HOST" != *:* ]]; then
+        die "Specifying a port is mandatory"
+    fi
     CERTNAME="$HOST"
     SNI="${HOST%%@*}"
     if [ ! $SNI = $HOST ] ; then
@@ -159,17 +173,6 @@ else
     fi
 fi
 rm -f "$DIR/${CERTNAME}_"*
-
-function die () {
-    echo "$1" >&2
-    exit 1
-}
-
-function debug () {
-    if [ $DEBUG = true ] ; then
-        echo "$1" >&2
-    fi
-}
 
 function generate_rsa_key () {
     # create new RSA private/public key pair (re-use private key if applicable)
@@ -239,8 +242,7 @@ function parse_certs () {
             if [ ! -z "$current_cert" ] ; then
                 printf "%s" "$current_cert" > "$DIR/${CERTNAME}_$counter"
             else
-                echo "Error while parsing certificate" >&2
-                exit 1
+                die "Error while parsing certificate"
             fi
             counter=$((counter+=1))
 
@@ -280,8 +282,7 @@ function oid() {
         ;;#sha256WithRSAEncryption
         "300d06092a864886f70d0101050500") echo sha1
         ;;#sha1WithRSAEncryption
-        *) echo "Unknow Hash Algorithm OID: $1" >&2
-            exit 1
+        *) die "Unknow Hash Algorithm OID: $1"
         ;;
     esac
 }
@@ -506,10 +507,9 @@ function clone_cert () {
         | openssl x509 -inform DER -outform PEM > "$CLONED_CERT"
 
     if [ ! -s "$CLONED_CERT" ] ; then
-        echo "Cloning failed" >&2
         rm "$CLONED_CERT"
         rm "$CLONED_KEY"
-        exit 1
+        die "Cloning failed"
     fi
     return-result
 }
