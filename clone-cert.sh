@@ -68,6 +68,10 @@ Optional parameters:
         Does not alter the issuer name, which is done otherwise to
         trick browsers.
 
+    --keep-serial:
+        Does not alter the serial number, which is done otherwise to
+        trick browsers.
+
     --debug:
         Print debug messages
 
@@ -92,6 +96,7 @@ ISSUER_CERT=""
 ISSUER_KEY=""
 REUSE_KEYS=false
 KEEP_ISSUER_NAME=false
+KEEP_SERIAL=false
 for i in "$@" ; do
     case $i in
             -d=*|--directory=*)
@@ -112,6 +117,10 @@ for i in "$@" ; do
         ;;
             --keep-issuer-name)
             KEEP_ISSUER_NAME=true
+            shift # past argument=value
+        ;;
+            --keep-serial)
+            KEEP_SERIAL=true
             shift # past argument=value
         ;;
             --debug)
@@ -376,7 +385,7 @@ function clone_cert () {
 
     # if it is not self-signed, the serial needs to be changed, too
     # because browsers keep track of that
-    if [[ $SELF_SIGNED = false ]]; then
+    if [[ $SELF_SIGNED = false && $KEEP_SERIAL = false ]]; then
         # avoid negative serial number
         # only change 16 hex digits in the middle
         NEW_SERIAL=$(openssl rand -hex 8)
