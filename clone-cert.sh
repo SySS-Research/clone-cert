@@ -405,7 +405,7 @@ function clone_cert () {
 
     OLD_MODULUS="$(openssl x509 -in "$CERT" -modulus -noout \
         | sed -e 's/Modulus=//' | tr "[:upper:]" "[:lower:]")"
-    if [[ $OLD_MODULUS = "wrong algorithm type" ]] ; then
+    if [[ $OLD_MODULUS = "wrong algorithm type" || $OLD_MODULUS = "no modulus for this public key type" ]] ; then
         # it's EC and not RSA (or maybe DSA...)
         SCHEME=ec
         offset="$(openssl x509 -in "$CERT" -pubkey -noout 2> /dev/null \
