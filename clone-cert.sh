@@ -348,8 +348,13 @@ function extract-values () {
     AUTH_KEY_IDENTIFIER="$(openssl asn1parse -in "$CERT" \
         | grep -A1 ":X509v3 Authority Key Identifier" | tail -n1 \
         | sed 's/.*\[HEX DUMP\]://' \
-        | sed 's/^.\{8\}//')"
-    debug "Original AuthKeyIdentifier: $AUTH_KEY_IDENTIFIER"
+        | sed 's/^.\{8\}//')"    
+    if [[ -z "$AUTH_KEY_IDENTIFIER" ]]; then    
+        AUTH_KEY_IDENTIFIER="$(openssl rand -hex 20)"
+        debug "Generated random AuthKeyIdentifier: $AUTH_KEY_IDENTIFIER"
+    else
+        debug "Original AuthKeyIdentifier: $AUTH_KEY_IDENTIFIER"
+    fi
 }
 
 function create-fake-CA () {
